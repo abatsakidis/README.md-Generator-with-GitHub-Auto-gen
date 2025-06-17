@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>README.md Generator with GitHub Auto-gen</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #f8f9fa;
+      --text-color: #000;
+      --preview-bg: #fff;
+      --code-bg: #f0f0f0;
+      --border-color: #ccc;
+    }
+    body.dark {
+      --bg-color: #1e1e1e;
+      --text-color: #eee;
+      --preview-bg: #2a2a2a;
+      --code-bg: #333;
+      --border-color: #555;
+    }
+    body {
+      font-family: sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+      transition: background 0.3s, color 0.3s;
+    }
+    h1 { text-align: center; }
+    .toolbar, .github-auto {
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .toolbar button, .toolbar select, .github-auto input, .github-auto button {
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .github-auto input {
+      flex: 1 1 300px;
+      font-size: 14px;
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      background: var(--preview-bg);
+      color: var(--text-color);
+      border-radius: 4px;
+    }
+    .editor {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 250px;
+      font-family: monospace;
+      padding: 10px;
+      flex: 1 1 45%;
+      border: 1px solid var(--border-color);
+      background: var(--preview-bg);
+      color: var(--text-color);
+      box-sizing: border-box;
+      border-radius: 6px;
+      resize: vertical;
+    }
+    .preview {
+      flex: 1 1 45%;
+      background: var(--preview-bg);
+      border: 1px solid var(--border-color);
+      padding: 10px;
+      overflow: auto;
+      box-sizing: border-box;
+      border-radius: 6px;
+    }
+    pre { background: var(--code-bg); padding: 10px; overflow-x: auto; border-radius: 4px;}
+    code { background: var(--code-bg); padding: 2px 4px; border-radius: 4px; }
+
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      color: var(--text-color);
+      user-select: none;
+    }
+    .drop-zone.dragover {
+      background-color: rgba(100, 100, 100, 0.1);
+    }
+    #save-status {
+      font-size: 14px;
+      color: green;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      margin-top: -5px;
+      margin-bottom: 10px;
+      height: 1em;
+    }
+    #save-status.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <h1>README.md Generator with GitHub Auto-gen</h1>
+
+  <div class="github-auto">
+    <input type="text" id="githubRepo" placeholder="Enter GitHub repo (e.g. user/repo)" />
+    <button onclick="fetchGitHubData()">Auto-generate README</button>
+  </div>
+
+  <div class="toolbar">
+    <select id="templateSelect" onchange="loadTemplate()">
+      <option value="">📄 Choose Template</option>
+      <option value="basic">🧾 Basic</option>
+      <option value="project">💻 Project</option>
+      <option value="library">📦 Library</option>
+      <option value="cli">🖥️ CLI Tool</option>
+      <option value="api">🌐 API Doc</option>
+    </select>
+
+    <select onchange="insertBadge(this.value)">
+      <option value="">⭐ Insert Badge</option>
+      <option value="npm">📦 NPM</option>
+      <option value="coverage">🧪 Coverage</option>
+      <option value="license">🔐 License</option>
+      <option value="contributors">👥 Contributors</option>
+      <option value="lastcommit">📅 Last Commit</option>
+      <option value="issues">🐞 Open Issues</option>
+      <option value="prs">✅ Pull Requests</option>
+      <option value="stars">🌟 Stars</option>
+      <option value="forks">🍴 Forks</option>
+    </select>
+
+    <button onclick="insert('# ')">H1</button>
+    <button onclick="insert('## ')">H2</button>
+    <button onclick="insert('- ')">Bullet</button>
+    <button onclick="insert('```\ncode\n```')">Code</button>
+    <button onclick="insert('![Alt text](image-url)')">Image</button>
+    <button onclick="insert('[Link](http://)')">Link</button>
+    <button onclick="insert('![Badge](https://img.shields.io/badge/example-blue)')">Badge</button>
+    <button onclick="insertGithubBadge()">GitHub Badge</button>
+    <button onclick="clearEditor()">Clear</button>
+    <button onclick="downloadMarkdown()">Download</button>
+    <button onclick="toggleDarkMode()">🌗 Dark Mode</button>
+  </div>
+
+  <div id="save-status">Saved!</div>
+
+  <div class="drop-zone" id="dropZone">
+    Drag & drop an image file here to insert into the README
+  </div>
+
+  <div class="editor">
+    <textarea id="input" oninput="updatePreview()" placeholder="Type or paste your markdown..."></textarea>
+    <div class="preview" id="preview"></div>
+  </div>
+
+  <script>
+    const templates = {
+      basic: `# Project Title
+
+Brief description of your project.
+
+## Features
+
+- Feature 1
+- Feature 2
+
+## License
+
+[MIT](https://choosealicense.com/licenses/mit/)
+`,
+      project: `# My Cool Project
+
+Simple description.
+
+## Installation
+
+\`\`\`bash
+npm install my-cool-project
+\`\`\`
+
+## Usage
+
+\`\`\`js
+import cool from 'my-cool-project';
+cool();
+\`\`\`
+
+## License
+
+MIT
+`,
+      library: `# AwesomeLib
+
+Small reusable JavaScript library.
+
+## Installation
+
+\`\`\`bash
+npm install awesomelib
+\`\`\`
+
+## API
+
+| Method   | Description        |
+|----------|--------------------|
+| init()   | Initialize library |
+| doTask() | Run main function  |
+
+## License
+
+MIT
+`,
+      cli: `# cli-tool
+
+Command-line utility to simplify your workflow.
+
+## Installation
+
+\`\`\`bash
+npm install -g cli-tool
+\`\`\`
+
+## Usage
+
+\`\`\`bash
+cli-tool --help
+\`\`\`
+
+## Commands
+
+- \`init\` - Set up the tool
+- \`run\` - Execute main operation
+
+## License
+
+MIT
+`,
+      api: `# REST API Documentation
+
+Base URL: \`https://api.example.com\`
+
+## Endpoints
+
+### GET /users
+
+Returns all users.
+
+### POST /users
+
+Creates a new user.
+
+\`\`\`json
+{
+  "name": "John",
+  "email": "john@example.com"
+}
+\`\`\`
+
+### GET /users/{id}
+
+Returns user by ID.
+
+## Error Codes
+
+- 400 Bad Request
+- 401 Unauthorized
+- 404 Not Found
+`
+    };
+
+    function insert(text) {
+      const input = document.getElementById("input");
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const current = input.value;
+      input.value = current.substring(0, start) + text + current.substring(end);
+      input.selectionStart = input.selectionEnd = start + text.length;
+      input.focus();
+      updatePreview();
+    }
+
+    function insertGithubBadge() {
+      const repo = prompt("Enter GitHub repo (e.g. user/repo):");
+      if (repo) {
+        const badge = `![Build](https://github.com/${repo}/actions/workflows/main.yml/badge.svg)\n`;
+        insert(badge);
+      }
+    }
+
+    function updatePreview() {
+      const input = document.getElementById("input");
+      const markdown = input.value;
+      localStorage.setItem("readmeContent", markdown);
+      document.getElementById("preview").innerHTML = marked.parse(markdown);
+      showSaveStatus();
+    }
+
+    function loadTemplate() {
+      const select = document.getElementById("templateSelect");
+      const templateName = select.value;
+      if (templateName && templates[templateName]) {
+        document.getElementById("input").value = templates[templateName];
+        updatePreview();
+      }
+    }
+
+    function fetchGitHubData() {
+      const repo = document.getElementById("githubRepo").value.trim();
+      if (!repo) {
+        alert("Please enter a GitHub repository in the format user/repo");
+        return;
+      }
+      fetch(`https://api.github.com/repos/${repo}`)
+        .then(res => {
+          if (!res.ok) throw new Error("Repository not found");
+          return res.json();
+        })
+        .then(data => {
+          const md = `
+# ${data.name}
+
+${data.description || ''}
+
+## Badges
+
+![Stars](https://img.shields.io/github/stars/${repo})
+![Forks](https://img.shields.io/github/forks/${repo})
+![Issues](https://img.shields.io/github/issues/${repo})
+![Last Commit](https://img.shields.io/github/last-commit/${repo})
+
+## License
+
+${data.license ? data.license.name : 'No license specified'}
+
+## Repo Details
+
+- Owner: ${data.owner.login}
+- Language: ${data.language || 'N/A'}
+- Open Issues: ${data.open_issues_count}
+
+---
+`;
+          document.getElementById("input").value = md;
+          updatePreview();
+        })
+        .catch(err => alert("Error fetching repo info: " + err.message));
+    }
+
+    function clearEditor() {
+      if (confirm("Clear editor content?")) {
+        document.getElementById("input").value = '';
+        updatePreview();
+      }
+    }
+
+    function downloadMarkdown() {
+      const content = document.getElementById("input").value;
+      const blob = new Blob([content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "README.md";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark");
+    }
+
+    function showSaveStatus() {
+      const status = document.getElementById("save-status");
+      status.classList.add("visible");
+      clearTimeout(status.timeout);
+      status.timeout = setTimeout(() => {
+        status.classList.remove("visible");
+      }, 1200);
+    }
+
+    function insertBadge(type) {
+      if (!type) return;
+
+      const repo = document.getElementById("githubRepo").value.trim();
+      if (!repo) {
+        alert("Enter GitHub repo (user/repo) to insert badges.");
+        return;
+      }
+
+      let badge = '';
+      switch(type) {
+        case 'npm':
+          badge = `![NPM Version](https://img.shields.io/npm/v/${repo.split('/')[1] || repo}.svg)`;
+          break;
+        case 'coverage':
+          badge = `![Coverage](https://img.shields.io/coveralls/github/${repo})`;
+          break;
+        case 'license':
+          badge = `![License](https://img.shields.io/github/license/${repo})`;
+          break;
+        case 'contributors':
+          badge = `![Contributors](https://img.shields.io/github/contributors/${repo})`;
+          break;
+        case 'lastcommit':
+          badge = `![Last Commit](https://img.shields.io/github/last-commit/${repo})`;
+          break;
+        case 'issues':
+          badge = `![Open Issues](https://img.shields.io/github/issues/${repo})`;
+          break;
+        case 'prs':
+          badge = `![Pull Requests](https://img.shields.io/github/issues-pr/${repo})`;
+          break;
+        case 'stars':
+          badge = `![Stars](https://img.shields.io/github/stars/${repo})`;
+          break;
+        case 'forks':
+          badge = `![Forks](https://img.shields.io/github/forks/${repo})`;
+          break;
+        default:
+          badge = '';
+      }
+      if (badge) {
+        insert(badge + ' ');
+      }
+      // Reset select to placeholder
+      document.querySelector('select[onchange="insertBadge(this.value)"]').value = '';
+    }
+
+    // Drag & drop image handling
+    const dropZone = document.getElementById("dropZone");
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length === 0) return;
+      const file = files[0];
+      if (!file.type.startsWith('image/')) {
+        alert("Only image files are supported.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const dataUrl = event.target.result;
+        const altText = prompt("Enter alt text for the image:", file.name) || file.name;
+        const markdownImg = `![${altText}](${dataUrl})`;
+        insert(markdownImg + '\n');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // On load, restore from localStorage
+    window.onload = function() {
+      const saved = localStorage.getItem("readmeContent");
+      if (saved) {
+        document.getElementById("input").value = saved;
+      }
+      updatePreview();
+    };
+  </script>
+</body>
+</html>
