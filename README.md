@@ -28,6 +28,10 @@ This is a simple web-based tool that allows users to create and preview `README.
 4. Insert badges, format content, and preview live.
 5. Download your completed `README.md` file.
 
+## Screenshot
+
+![App Screenshot](screenshot/screen.jpg)
+
 ## License
 
 MIT
